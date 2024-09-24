@@ -11,9 +11,7 @@ const port = 3000;
 
 let userIPs = [];
 let adminLoginRecords = [];
-
-// 記錄每個 IP 的訪問次數
-const ipVisitCount = {};
+const ipVisitCount = {}; // 記錄每個 IP 的訪問次數
 
 // 中介函數：用來檢查用戶是否已登入
 function auth(req, res, next) {
@@ -22,7 +20,6 @@ function auth(req, res, next) {
         res.set('WWW-Authenticate', 'Basic realm="admin"');
         return res.status(401).send('Access denied');
     }
-    // 記錄成功登入的時間和IP
     adminLoginRecords.push({
         ip: req.ip,
         time: moment().format('YYYY-MM-DD HH:mm:ss')
@@ -52,19 +49,57 @@ app.get('/', (req, res) => {
     res.send('Welcome to the website. Your IP has been recorded.');
 });
 
-// /admin 路徑，需要身份驗證
+// /admin 路徑，需要身份驗證，並包含分頁和查詢功能
 app.get('/admin', auth, (req, res) => {
-    let ipListHtml = userIPs.map(record => `<li>${record.ip} - ${record.time}</li>`).join('');
+    const page = parseInt(req.query.page) || 1; // 頁碼
+    const limit = 10; // 每頁顯示數量
+    const search = req.query.search || ''; // 查詢條件
+    const filteredIPs = userIPs.filter(record => 
+        record.ip.includes(search) || record.time.includes(search)
+    );
+    const totalPages = Math.ceil(filteredIPs.length / limit);
+    const start = (page - 1) * limit;
+    const paginatedIPs = filteredIPs.slice(start, start + limit);
+
+    let ipListHtml = paginatedIPs.map(record => `<li>${record.ip} - ${record.time}</li>`).join('');
     let adminLoginsHtml = adminLoginRecords.map(record => `<li>${record.ip} - ${record.time}</li>`).join('');
+    
     res.send(`
-        <h1>Admin Page</h1>
-        <p>Recorded IPs:</p>
-        <ul>${ipListHtml}</ul>
-        <h2>Admin Login Records</h2>
-        <ul>${adminLoginsHtml}</ul>
-        <form action="/admin/clear" method="POST">
-            <button type="submit">Clear IP Records</button>
-        </form>
+        <style>
+            body { font-family: Arial, sans-serif; }
+            .container { width: 80%; margin: auto; }
+            h1 { color: #333; text-align: center; }
+            ul { list-style-type: none; padding: 0; }
+            li { background-color: #f9f9f9; margin: 5px 0; padding: 10px; border-radius: 5px; }
+            form { text-align: center; margin-bottom: 20px; }
+            button, input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+            .pagination { display: flex; justify-content: center; }
+            .pagination a { margin: 0 5px; padding: 5px 10px; background-color: #00bfff; color: white; text-decoration: none; }
+            .pagination a.active { background-color: #333; }
+        </style>
+
+        <div class="container">
+            <h1>Admin Page</h1>
+            <form action="/admin" method="GET">
+                <input type="text" name="search" placeholder="Search by IP or Time" value="${search}">
+                <button type="submit">Search</button>
+            </form>
+            <p>Recorded IPs (Page ${page} of ${totalPages}):</p>
+            <ul>${ipListHtml}</ul>
+            
+            <div class="pagination">
+                ${Array.from({ length: totalPages }, (v, k) => k + 1).map(i => `
+                    <a href="/admin?page=${i}&search=${search}" class="${i === page ? 'active' : ''}">${i}</a>
+                `).join('')}
+            </div>
+
+            <h2>Admin Login Records</h2>
+            <ul>${adminLoginsHtml}</ul>
+
+            <form action="/admin/clear" method="POST">
+                <button type="submit">Clear IP Records</button>
+            </form>
+        </div>
     `);
 });
 
